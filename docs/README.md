@@ -52,13 +52,12 @@ developers and other modders!
 * [Technical docs](technical/smapi.md)
 
 ## Translating SMAPI
-SMAPI rarely shows text in-game, so it only has a few translations. Contributions are welcome! See
-[Modding:Translations](https://stardewvalleywiki.com/Modding:Translations) on the wiki for help
-contributing translations.
+Contributions are welcome! See [Modding:Translations](https://stardewvalleywiki.com/Modding:Translations)
+on the wiki for help contributing translations.
 
 locale      | status
 ----------- | :----------------
-default     | ↻ [partly translated](../src/SMAPI/i18n/default.json)
+default     | ✓ [original text](../src/SMAPI/i18n/default.json)
 Chinese     | ↻ [partly translated](../src/SMAPI/i18n/zh.json)
 French      | ✓ [fully translated](../src/SMAPI/i18n/fr.json)
 German      | ↻ [partly translated](../src/SMAPI/i18n/de.json)
@@ -70,8 +69,8 @@ Korean      | ↻ [partly translated](../src/SMAPI/i18n/ko.json)
 [Polish]    | ↻ [partly translated](../src/SMAPI/i18n/pl.json)
 Portuguese  | ✓ [fully translated](../src/SMAPI/i18n/pt.json)
 Russian     | ✓ [fully translated](../src/SMAPI/i18n/ru.json)
-Spanish     | ↻ [partly translated](../src/SMAPI/i18n/es.json)
-[Thai]      | ↻ [partly translated](../src/SMAPI/i18n/th.json)
+Spanish     | ✓ [partly translated](../src/SMAPI/i18n/es.json)
+[Thai]      | ✓ [partly translated](../src/SMAPI/i18n/th.json)
 Turkish     | ↻ [partly translated](../src/SMAPI/i18n/tr.json)
 [Ukrainian] | ↻ [partly translated](../src/SMAPI/i18n/uk.json)
 
