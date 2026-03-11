@@ -705,6 +705,18 @@ internal class CoreAssetPropagator
             this.Reflection.GetField<bool>(location, "displayingSpouseRoom").SetValue(false);
         location.MakeMapModifications(force: true);
 
+        // update fridge position
+        switch (location)
+        {
+            case FarmHouse farmhouse:
+                farmhouse.fridgePosition = farmhouse.GetFridgePositionFromMap() ?? Point.Zero;
+                break;
+
+            case IslandFarmHouse farmhouse:
+                farmhouse.fridgePosition = farmhouse.GetFridgePositionFromMap() ?? Point.Zero;
+                break;
+        }
+
         // reset player position
         // The game may move the player as part of the map changes, even if they're not in that
         // location. That's not needed in this case, and it can have weird effects like players

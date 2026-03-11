@@ -5,6 +5,7 @@
 * For players:
   * Minor performance optimizations.
   * Fixed the Linux/macOS installer not saving the color scheme correctly in 4.5.0+.
+  * Fixed farmhouse fridge when a mod dynamically adds it in later.
   * Fixed typo in config UI text (thanks to QuentiumYT!).
   * Improved translations. Thanks to dekthaiinchina (updated Thai), dewanggatrustha (updated Indonesian), QuentiumYT (updated French), Timur13240
  (updated Russian), and vlcoo (updated Spanish)!
