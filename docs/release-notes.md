@@ -1,6 +1,11 @@
 ← [README](README.md)
 
 # Release notes
+## Upcoming release
+* For players:
+  * Improved performance.
+  * Improved error message when a mod is blocked by Windows Smart App Control.
+
 ## 4.5.2
 Released 14 March 2026 for Stardew Valley 1.6.14 or later. See [build attestation](https://github.com/Pathoschild/SMAPI/attestations/21366863).
 

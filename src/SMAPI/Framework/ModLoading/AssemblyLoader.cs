@@ -7,6 +7,7 @@ using System.Reflection;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using StardewModdingAPI.Framework.Exceptions;
+using StardewModdingAPI.Framework.Extensions;
 using StardewModdingAPI.Framework.ModLoading.Framework;
 using StardewModdingAPI.Framework.ModLoading.Symbols;
 using StardewModdingAPI.Metadata;
@@ -123,7 +124,7 @@ internal class AssemblyLoader : IDisposable
         }
 
         // validate load
-        if (!assemblies.Any() || assemblies[0].Status == AssemblyLoadStatus.Failed)
+        if (assemblies.Length == 0 || assemblies[0].Status == AssemblyLoadStatus.Failed)
         {
             throw new SAssemblyLoadFailedException(!assemblyFile.Exists
                 ? $"Could not load '{assemblyFile.FullName}' because it doesn't exist."
@@ -475,7 +476,7 @@ internal class AssemblyLoader : IDisposable
 
         // format messages
         string phrase;
-        if (!handler.Phrases.Any())
+        if (handler.Phrases.Count == 0)
             phrase = handler.DefaultPhrase;
         else if (this.LogTechnicalDetailsForBrokenMods && result == InstructionHandleResult.NotCompatible)
             phrase = "\n - " + string.Join(";\n - ", handler.Phrases.OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
