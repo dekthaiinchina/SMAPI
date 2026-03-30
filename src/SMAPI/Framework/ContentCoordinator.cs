@@ -55,7 +55,7 @@ internal class ContentCoordinator : IDisposable
     private readonly Action<BaseContentManager, IAssetName> OnAssetLoaded;
 
     /// <summary>A callback to invoke when any asset names have been invalidated from the cache.</summary>
-    private readonly Action<IList<IAssetName>> OnAssetsInvalidated;
+    private readonly Action<ICollection<IAssetName>> OnAssetsInvalidated;
 
     /// <summary>Get the load/edit operations to apply to an asset by querying registered <see cref="IContentEvents.AssetRequested"/> event handlers.</summary>
     private readonly Func<IAssetInfo, AssetOperationGroup?> RequestAssetOperations;
@@ -116,7 +116,7 @@ internal class ContentCoordinator : IDisposable
     /// <param name="getFileLookup">Get a file lookup for the given directory.</param>
     /// <param name="onAssetsInvalidated">A callback to invoke when any asset names have been invalidated from the cache.</param>
     /// <param name="requestAssetOperations">Get the load/edit operations to apply to an asset by querying registered <see cref="IContentEvents.AssetRequested"/> event handlers.</param>
-    public ContentCoordinator(IServiceProvider serviceProvider, string rootDirectory, CultureInfo currentCulture, IMonitor monitor, Multiplayer multiplayer, Reflector reflection, JsonHelper jsonHelper, Action onLoadingFirstAsset, Action<BaseContentManager, IAssetName> onAssetLoaded, Func<string, IFileLookup> getFileLookup, Action<IList<IAssetName>> onAssetsInvalidated, Func<IAssetInfo, AssetOperationGroup?> requestAssetOperations)
+    public ContentCoordinator(IServiceProvider serviceProvider, string rootDirectory, CultureInfo currentCulture, IMonitor monitor, Multiplayer multiplayer, Reflector reflection, JsonHelper jsonHelper, Action onLoadingFirstAsset, Action<BaseContentManager, IAssetName> onAssetLoaded, Func<string, IFileLookup> getFileLookup, Action<ICollection<IAssetName>> onAssetsInvalidated, Func<IAssetInfo, AssetOperationGroup?> requestAssetOperations)
     {
         this.GetFileLookup = getFileLookup;
         this.Monitor = monitor ?? throw new ArgumentNullException(nameof(monitor));
@@ -446,7 +446,7 @@ internal class ContentCoordinator : IDisposable
                 this.AssetOperationsByKey.Remove(name);
 
             // raise event
-            this.OnAssetsInvalidated(invalidatedAssets.Keys.ToArray());
+            this.OnAssetsInvalidated(invalidatedAssets.Keys);
 
             // propagate changes to the game
             this.CoreAssets.Propagate(
@@ -460,12 +460,12 @@ internal class ContentCoordinator : IDisposable
             // log summary
             StringBuilder report = new();
             {
-                IAssetName[] invalidatedKeys = invalidatedAssets.Keys.ToArray();
+                ICollection<IAssetName> invalidatedKeys = invalidatedAssets.Keys;
                 IAssetName[] propagatedKeys = propagated.Where(p => p.Value).Select(p => p.Key).ToArray();
 
-                string FormatKeyList(IEnumerable<IAssetName> keys) => string.Join(", ", keys.Select(p => p.Name).OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
+                string FormatKeyList(ICollection<IAssetName> keys) => string.Join(", ", keys.Select(p => p.Name).OrderBy(p => p, StringComparer.OrdinalIgnoreCase));
 
-                report.AppendLine($"Invalidated {invalidatedKeys.Length} asset names ({FormatKeyList(invalidatedKeys)}).");
+                report.AppendLine($"Invalidated {invalidatedKeys.Count} asset names ({FormatKeyList(invalidatedKeys)}).");
                 report.AppendLine(propagated.Count > 0
                     ? $"Propagated {propagatedKeys.Length} core assets ({FormatKeyList(propagatedKeys)})."
                     : "Propagated 0 core assets."
@@ -494,13 +494,16 @@ internal class ContentCoordinator : IDisposable
     /// <summary>Get all loaded instances of an asset name.</summary>
     /// <param name="assetName">The asset name.</param>
     [SuppressMessage("ReSharper", "UnusedMember.Global", Justification = "This method is provided for Content Patcher.")]
-    public IEnumerable<object> GetLoadedValues(IAssetName assetName)
+    public IReadOnlyList<object> GetLoadedValues(IAssetName assetName)
     {
         return this.ContentManagerLock.InReadLock(() =>
         {
             List<object> values = [];
-            foreach (IContentManager content in this.ContentManagers.Where(p => !p.IsNamespaced && p.IsLoaded(assetName)))
+            foreach (IContentManager content in this.ContentManagers)
             {
+                if (content.IsNamespaced || !content.IsLoaded(assetName))
+                    continue;
+
                 object value = content.LoadExact<object>(assetName, useCache: true);
                 values.Add(value);
             }
@@ -593,7 +596,7 @@ internal class ContentCoordinator : IDisposable
 
     /// <summary>Get the language enums (like <see cref="LocalizedContentManager.LanguageCode.ja"/>) indexed by locale code (like <c>ja-JP</c>).</summary>
     /// <param name="customLanguages">The custom languages to add to the lookup.</param>
-    private Dictionary<string, LocalizedContentManager.LanguageCode> GetLocaleCodes(IEnumerable<ModLanguage?> customLanguages)
+    private Dictionary<string, LocalizedContentManager.LanguageCode> GetLocaleCodes(IReadOnlyList<ModLanguage?> customLanguages)
     {
         var map = new Dictionary<string, LocalizedContentManager.LanguageCode>(StringComparer.OrdinalIgnoreCase);
 
@@ -605,7 +608,7 @@ internal class ContentCoordinator : IDisposable
         }
 
         // vanilla languages (override custom language if they conflict)
-        foreach (LocalizedContentManager.LanguageCode code in Enum.GetValues(typeof(LocalizedContentManager.LanguageCode)))
+        foreach (LocalizedContentManager.LanguageCode code in Enum.GetValues<LocalizedContentManager.LanguageCode>())
         {
             string? locale = this.GetLocaleCode(code);
             if (locale != null)

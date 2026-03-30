@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.Linq;
 
 namespace StardewModdingAPI.Framework.StateTracking.FieldWatchers;
 
@@ -35,10 +34,10 @@ internal class ObservableCollectionWatcher<TValue> : BaseDisposableWatcher, ICol
     public bool IsChanged => this.AddedImpl.Count > 0 || this.RemovedImpl.Count > 0;
 
     /// <inheritdoc />
-    public IEnumerable<TValue> Added => this.AddedImpl;
+    public IReadOnlyCollection<TValue> Added => this.AddedImpl;
 
     /// <inheritdoc />
-    public IEnumerable<TValue> Removed => this.RemovedImpl;
+    public IReadOnlyCollection<TValue> Removed => this.RemovedImpl;
 
 
     /*********
@@ -86,25 +85,31 @@ internal class ObservableCollectionWatcher<TValue> : BaseDisposableWatcher, ICol
     /// <param name="e">The event arguments.</param>
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // clear
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
             this.RemovedImpl.AddRange(this.PreviousValues);
             this.PreviousValues.Clear();
+            return;
         }
-        else
-        {
-            TValue[]? added = e.NewItems?.Cast<TValue>().ToArray();
-            TValue[]? removed = e.OldItems?.Cast<TValue>().ToArray();
 
-            if (removed != null)
+        // removed items
+        if (e.OldItems != null)
+        {
+            foreach (TValue value in e.OldItems)
+                this.RemovedImpl.Add(value);
+            this.PreviousValues.RemoveRange(e.OldStartingIndex, e.OldItems.Count);
+        }
+
+        // added items
+        if (e.NewItems != null)
+        {
+            int insertAt = e.NewStartingIndex;
+            foreach (TValue value in e.NewItems)
             {
-                this.RemovedImpl.AddRange(removed);
-                this.PreviousValues.RemoveRange(e.OldStartingIndex, removed.Length);
-            }
-            if (added != null)
-            {
-                this.AddedImpl.AddRange(added);
-                this.PreviousValues.InsertRange(e.NewStartingIndex, added);
+                this.AddedImpl.Add(value);
+                this.PreviousValues.Insert(insertAt, value);
+                insertAt++;
             }
         }
     }

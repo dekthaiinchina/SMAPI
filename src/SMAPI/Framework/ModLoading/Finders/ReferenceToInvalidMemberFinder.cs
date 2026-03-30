@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using StardewModdingAPI.Framework.ModLoading.Framework;
@@ -41,13 +40,25 @@ internal class ReferenceToInvalidMemberFinder : BaseInstructionHandler
         FieldReference? fieldRef = RewriteHelper.AsFieldReference(instruction);
         if (fieldRef != null && this.ShouldValidate(fieldRef.DeclaringType))
         {
-            FieldDefinition? targetField = fieldRef.DeclaringType.Resolve()?.Fields.FirstOrDefault(p => p.Name == fieldRef.Name);
+            // resolve field
+            FieldDefinition? targetField = null;
+            if (fieldRef.DeclaringType.Resolve() is { } declaringType)
+            {
+                foreach (FieldDefinition field in declaringType.Fields)
+                {
+                    if (field.Name == fieldRef.Name)
+                    {
+                        targetField = field;
+                        break;
+                    }
+                }
+            }
 
-            // wrong return type
+            // detect wrong return type
             if (targetField != null && !RewriteHelper.LooksLikeSameType(fieldRef.FieldType, targetField.FieldType))
                 this.MarkFlag(InstructionHandleResult.NotCompatible, $"reference to {this.GetMemberDisplayName(fieldRef)} (field returns {this.GetFriendlyTypeName(targetField.FieldType)}, not {this.GetFriendlyTypeName(fieldRef.FieldType)})");
 
-            // missing
+            // detect missing
             else if (targetField == null || targetField.HasConstant || !RewriteHelper.HasSameNamespaceAndName(fieldRef.DeclaringType, targetField.DeclaringType))
                 this.MarkFlag(InstructionHandleResult.NotCompatible, $"reference to {this.GetMemberDisplayName(fieldRef)} (no such field)");
 
@@ -63,9 +74,25 @@ internal class ReferenceToInvalidMemberFinder : BaseInstructionHandler
             // wrong return type
             if (methodDef != null && this.ShouldValidate(methodRef.DeclaringType))
             {
-                MethodDefinition[]? candidateMethods = methodRef.DeclaringType.Resolve()?.Methods.Where(found => found.Name == methodRef.Name).ToArray();
-                if (candidateMethods is { Length: > 0 } && candidateMethods.All(method => !RewriteHelper.LooksLikeSameType(method.ReturnType, methodDef.ReturnType)))
-                    this.MarkFlag(InstructionHandleResult.NotCompatible, $"reference to {this.GetMemberDisplayName(methodDef)} (no such method returns {this.GetFriendlyTypeName(methodDef.ReturnType)})");
+                if (methodRef.DeclaringType.Resolve() is { } declaringType)
+                {
+                    bool foundName = false;
+                    bool foundMatch = true;
+
+                    foreach (MethodDefinition method in declaringType.Methods)
+                    {
+                        if (method.Name != methodRef.Name)
+                            continue;
+
+                        foundName = true;
+                        foundMatch = RewriteHelper.LooksLikeSameType(method.ReturnType, methodDef.ReturnType);
+                        if (foundMatch)
+                            break;
+                    }
+
+                    if (foundName && !foundMatch)
+                        this.MarkFlag(InstructionHandleResult.NotCompatible, $"reference to {this.GetMemberDisplayName(methodDef)} (no such method returns {this.GetFriendlyTypeName(methodDef.ReturnType)})");
+                }
             }
 
             // missing

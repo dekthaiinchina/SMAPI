@@ -133,7 +133,7 @@ public class ModResolverTests
     [Test(Description = "Assert that validation doesn't fail if there are no mods installed.")]
     public void ValidateManifests_NoMods_DoesNothing()
     {
-        new ModResolver().ValidateManifests(Array.Empty<ModMetadata>(), apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
+        new ModResolver().ValidateManifests([], apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
     }
 
     [Test(Description = "Assert that validation skips manifests that have already failed without calling any other properties.")]
@@ -263,7 +263,7 @@ public class ModResolverTests
     public void ProcessDependencies_NoMods_DoesNothing()
     {
         // act
-        IModMetadata[] mods = new ModResolver().ProcessDependencies(Array.Empty<IModMetadata>(), new ModDatabase()).ToArray();
+        IModMetadata[] mods = new ModResolver().ProcessDependencies([], new ModDatabase()).ToArray();
 
         // assert
         mods.Should().BeEmpty("it should match number of mods input");

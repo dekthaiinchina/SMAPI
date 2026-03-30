@@ -114,12 +114,14 @@ internal class AssemblyLoader : IDisposable
         // get referenced local assemblies
         AssemblyParseResult[] assemblies;
         {
-            HashSet<string> visitedAssemblyNames = new( // don't try loading assemblies that are already loaded
-                from assembly in AppDomain.CurrentDomain.GetAssemblies()
-                let name = assembly.GetName().Name
-                where name != null
-                select name
-            );
+            // don't try loading assemblies that are already loaded
+            HashSet<string> visitedAssemblyNames = [];
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                string? name = assembly.GetName().Name;
+                if (name != null)
+                    visitedAssemblyNames.Add(name);
+            }
             assemblies = this.GetReferencedLocalAssemblies(assemblyFile, visitedAssemblyNames, this.AssemblyDefinitionResolver).ToArray();
         }
 
@@ -336,7 +338,7 @@ internal class AssemblyLoader : IDisposable
             for (int i = 0; i < module.AssemblyReferences.Count; i++)
             {
                 // remove old assembly reference
-                if (this.AssemblyMap.RemoveNames.Any(name => module.AssemblyReferences[i].Name == name))
+                if (this.AssemblyMap.RemoveNames.Contains(module.AssemblyReferences[i].Name))
                 {
                     platformChanged = true;
                     module.AssemblyReferences.RemoveAt(i);
@@ -351,8 +353,7 @@ internal class AssemblyLoader : IDisposable
                     module.AssemblyReferences.Add(target);
 
                 // rewrite type scopes to use target assemblies
-                IEnumerable<TypeReference> typeReferences = module.GetTypeReferences().OrderBy(p => p.FullName);
-                foreach (TypeReference type in typeReferences)
+                foreach (TypeReference type in module.GetTypeReferences())
                     this.ChangeTypeScope(type);
 
                 // rewrite types using custom attributes

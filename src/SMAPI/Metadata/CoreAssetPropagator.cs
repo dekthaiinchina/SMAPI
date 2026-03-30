@@ -177,7 +177,18 @@ internal class CoreAssetPropagator
                     this.UpdateMap(info);
                     var newWarps = GetWarpSet(location);
 
-                    changedWarpRoutes = changedWarpRoutes || oldWarps.Count != newWarps.Count || oldWarps.Any(p => !newWarps.Contains(p));
+                    changedWarpRoutes = changedWarpRoutes || oldWarps.Count != newWarps.Count;
+                    if (!changedWarpRoutes)
+                    {
+                        foreach (string oldWarp in oldWarps)
+                        {
+                            if (!newWarps.Contains(oldWarp))
+                            {
+                                changedWarpRoutes = true;
+                                break;
+                            }
+                        }
+                    }
                     changed = true;
                 }
             }
@@ -581,29 +592,31 @@ internal class CoreAssetPropagator
     /// <returns>Returns whether any NPCs were updated.</returns>
     private bool UpdateNpcDialogue(IAssetName assetName)
     {
-        // get NPCs
         string name = Path.GetFileName(assetName.BaseName);
-        NPC[] villagers = this.GetCharacters().Where(npc => npc.Name == name && npc.IsVillager).ToArray();
-        if (!villagers.Any())
-            return false;
 
         // update dialogue
         // Note that marriage dialogue isn't reloaded after reset, but it doesn't need to be
         // propagated anyway since marriage dialogue keys can't be added/removed and the field
         // doesn't store the text itself.
-        foreach (NPC villager in villagers)
+        bool anyChanged = false;
+        foreach (NPC npc in this.GetCharacters())
         {
-            bool shouldSayMarriageDialogue = villager.shouldSayMarriageDialogue.Value;
-            MarriageDialogueReference[] marriageDialogue = villager.currentMarriageDialogue.ToArray();
+            if (npc.Name != name || !npc.IsVillager)
+                continue;
 
-            villager.resetSeasonalDialogue(); // doesn't only affect seasonal dialogue
-            villager.resetCurrentDialogue();
+            bool shouldSayMarriageDialogue = npc.shouldSayMarriageDialogue.Value;
+            MarriageDialogueReference[] marriageDialogue = npc.currentMarriageDialogue.ToArray();
 
-            villager.shouldSayMarriageDialogue.Set(shouldSayMarriageDialogue);
-            villager.currentMarriageDialogue.Set(marriageDialogue);
+            npc.resetSeasonalDialogue(); // doesn't only affect seasonal dialogue
+            npc.resetCurrentDialogue();
+
+            npc.shouldSayMarriageDialogue.Set(shouldSayMarriageDialogue);
+            npc.currentMarriageDialogue.Set(marriageDialogue);
+
+            anyChanged = true;
         }
 
-        return true;
+        return anyChanged;
     }
 
     /// <summary>Update the character data for matching NPCs.</summary>
@@ -621,33 +634,36 @@ internal class CoreAssetPropagator
     /// <returns>Returns whether any NPCs were updated.</returns>
     private bool UpdateNpcSchedules(IAssetName assetName)
     {
-        // get NPCs
         string name = Path.GetFileName(assetName.BaseName);
-        NPC[] villagers = this.GetCharacters().Where(npc => npc.Name == name && npc.IsVillager).ToArray();
-        if (!villagers.Any())
-            return false;
 
-        // update schedule
-        foreach (NPC villager in villagers)
+        // update schedules
+        bool anyChanged = false;
+        foreach (NPC npc in this.GetCharacters())
         {
+            if (npc.Name != name || !npc.IsVillager)
+                continue;
+
             // reload schedule
-            this.Reflection.GetField<bool>(villager, "_hasLoadedMasterScheduleData").SetValue(false);
-            this.Reflection.GetField<Dictionary<string, string>?>(villager, "_masterScheduleData").SetValue(null);
-            villager.TryLoadSchedule();
+            this.Reflection.GetField<bool>(npc, "_hasLoadedMasterScheduleData").SetValue(false);
+            this.Reflection.GetField<Dictionary<string, string>?>(npc, "_masterScheduleData").SetValue(null);
+            npc.TryLoadSchedule();
 
             // switch to new schedule if needed
-            if (villager.Schedule != null)
+            if (npc.Schedule != null)
             {
-                int lastScheduleTime = villager.Schedule.Keys.Where(p => p <= Game1.timeOfDay).OrderByDescending(p => p).FirstOrDefault();
+                int lastScheduleTime = npc.Schedule.Keys.Where(p => p <= Game1.timeOfDay).OrderByDescending(p => p).FirstOrDefault();
                 if (lastScheduleTime != 0)
                 {
-                    villager.queuedSchedulePaths.Clear();
-                    villager.lastAttemptedSchedule = 0;
-                    villager.checkSchedule(lastScheduleTime);
+                    npc.queuedSchedulePaths.Clear();
+                    npc.lastAttemptedSchedule = 0;
+                    npc.checkSchedule(lastScheduleTime);
                 }
             }
+
+            anyChanged = true;
         }
-        return true;
+
+        return anyChanged;
     }
 
     /// <summary>Update cached translations from the <c>Strings\StringsFromCSFiles</c> asset.</summary>
@@ -730,7 +746,7 @@ internal class CoreAssetPropagator
     ** Helpers
     ****/
     /// <summary>Get all NPCs in the game (excluding farm animals).</summary>
-    private IEnumerable<NPC> GetCharacters()
+    private IReadOnlyList<NPC> GetCharacters()
     {
         return this.WorldCache.GetOrSet(
             nameof(this.GetCharacters),
@@ -738,8 +754,11 @@ internal class CoreAssetPropagator
             {
                 List<NPC> characters = [];
 
-                foreach (NPC character in this.GetLocations().SelectMany(p => p.characters))
-                    characters.Add(character);
+                foreach (GameLocation location in this.GetLocations())
+                {
+                    foreach (NPC character in location.characters)
+                        characters.Add(character);
+                }
 
                 if (Game1.CurrentEvent?.actors != null)
                 {
@@ -753,7 +772,7 @@ internal class CoreAssetPropagator
     }
 
     /// <summary>Get all farm animals in the game.</summary>
-    private IEnumerable<FarmAnimal> GetFarmAnimals()
+    private IReadOnlyList<FarmAnimal> GetFarmAnimals()
     {
         return this.WorldCache.GetOrSet(
             nameof(this.GetFarmAnimals),
@@ -777,7 +796,7 @@ internal class CoreAssetPropagator
 
     /// <summary>Get all locations in the game.</summary>
     /// <param name="buildingInteriors">Whether to also get the interior locations for constructable buildings.</param>
-    private IEnumerable<GameLocation> GetLocations(bool buildingInteriors = true)
+    private IReadOnlyList<GameLocation> GetLocations(bool buildingInteriors = true)
     {
         return this.WorldCache.GetOrSet(
             $"{nameof(this.GetLocations)}_{buildingInteriors}",
@@ -787,7 +806,7 @@ internal class CoreAssetPropagator
 
     /// <summary>Get all locations in the game.</summary>
     /// <param name="buildingInteriors">Whether to also get the interior locations for constructable buildings.</param>
-    private IEnumerable<LocationInfo> GetLocationsWithInfo(bool buildingInteriors = true)
+    private IReadOnlyList<LocationInfo> GetLocationsWithInfo(bool buildingInteriors = true)
     {
         return this.WorldCache.GetOrSet(
             $"{nameof(this.GetLocationsWithInfo)}_{buildingInteriors}",
@@ -807,9 +826,9 @@ internal class CoreAssetPropagator
                 // get child locations
                 if (buildingInteriors)
                 {
-                    foreach (GameLocation location in locations.Select(p => p.Location).ToArray())
+                    foreach (LocationInfo location in locations.ToArray())
                     {
-                        foreach (Building building in location.buildings)
+                        foreach (Building building in location.Location.buildings)
                         {
                             GameLocation indoors = building.indoors.Value;
                             if (indoors is not null)

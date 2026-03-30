@@ -80,7 +80,7 @@ public class ChangeDescriptor
         this.Apply(values);
 
         // format
-        if (rawField == null && !values.Any())
+        if (rawField == null && values.Count == 0)
             return null;
         return string.Join(", ", values);
     }
@@ -91,7 +91,7 @@ public class ChangeDescriptor
     public void Apply(List<string> values)
     {
         // replace/remove values
-        if (this.Replace.Any() || this.Remove.Any())
+        if (this.Replace.Count > 0 || this.Remove.Count > 0)
         {
             for (int i = values.Count - 1; i >= 0; i--)
             {
@@ -106,16 +106,13 @@ public class ChangeDescriptor
         }
 
         // add values
-        if (this.Add.Any())
+        if (this.Add.Count > 0)
         {
             HashSet<string> curValues = new(values.Select(p => p.Trim()), StringComparer.OrdinalIgnoreCase);
             foreach (string add in this.Add)
             {
-                if (!curValues.Contains(add))
-                {
+                if (curValues.Add(add))
                     values.Add(add);
-                    curValues.Add(add);
-                }
             }
         }
     }
@@ -141,7 +138,7 @@ public class ChangeDescriptor
     /// <param name="descriptor">The raw change descriptor.</param>
     /// <param name="errors">The human-readable error message describing any invalid values that were ignored.</param>
     /// <param name="formatValue">Format a raw value into a normalized form if needed.</param>
-    public static ChangeDescriptor Parse(string? descriptor, out string[] errors, Func<string, string>? formatValue = null)
+    public static ChangeDescriptor Parse(string? descriptor, out IReadOnlyList<string> errors, Func<string, string>? formatValue = null)
     {
         var parsed = new ChangeDescriptor(formatValue ?? (p => p));
 
@@ -194,7 +191,7 @@ public class ChangeDescriptor
                 }
             }
 
-            errors = rawErrors.ToArray();
+            errors = rawErrors;
         }
         else
             errors = [];

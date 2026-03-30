@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using Microsoft.Xna.Framework.Input;
 using StardewValley;
 
@@ -645,11 +644,9 @@ public static class SButtonExtensions
         /// <returns>Returns whether the value was converted successfully.</returns>
         public bool TryGetKeyboard(out Keys key)
         {
-            if (Enum.IsDefined(typeof(Keys), (int)input))
-            {
-                key = (Keys)input;
+            key = (Keys)input;
+            if (Enum.IsDefined(key))
                 return true;
-            }
 
             key = Keys.None;
             return false;
@@ -660,11 +657,9 @@ public static class SButtonExtensions
         /// <returns>Returns whether the value was converted successfully.</returns>
         public bool TryGetController(out Buttons button)
         {
-            if (Enum.IsDefined(typeof(Buttons), (int)input - SButtonExtensions.ControllerOffset))
-            {
-                button = (Buttons)(input - SButtonExtensions.ControllerOffset);
+            button = (Buttons)(input - SButtonExtensions.ControllerOffset);
+            if (Enum.IsDefined(button))
                 return true;
-            }
 
             button = 0;
             return false;
@@ -697,13 +692,31 @@ public static class SButtonExtensions
         /// <summary>Get whether the given button is equivalent to <see cref="Options.useToolButton"/>.</summary>
         public bool IsUseToolButton()
         {
-            return input == SButton.ControllerX || Game1.options.useToolButton.Any(p => p.ToSButton() == input);
+            if (input is SButton.ControllerX)
+                return true;
+
+            foreach (InputButton button in Game1.options.useToolButton)
+            {
+                if (button.ToSButton() == input)
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>Get whether the given button is equivalent to <see cref="Options.actionButton"/>.</summary>
         public bool IsActionButton()
         {
-            return input == SButton.ControllerA || Game1.options.actionButton.Any(p => p.ToSButton() == input);
+            if (input is SButton.ControllerA)
+                return true;
+
+            foreach (InputButton button in Game1.options.actionButton)
+            {
+                if (button.ToSButton() == input)
+                    return true;
+            }
+
+            return false;
         }
     }
 }

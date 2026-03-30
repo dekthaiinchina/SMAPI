@@ -127,7 +127,9 @@ public class ModScanner
         // set appropriate invalid-mod error
         if (manifestFile == null)
         {
-            FileInfo[] files = this.RecursivelyGetFiles(searchFolder).ToArray();
+            List<FileInfo> files = [];
+            this.RecursivelyGetFiles(searchFolder, files);
+
             FileInfo[] relevantFiles = files.Where(this.IsRelevant).ToArray();
 
             // empty Vortex folder
@@ -136,7 +138,7 @@ public class ModScanner
                 return new ModFolder(root, searchFolder, ModType.Invalid, null, ModParseError.EmptyVortexFolder, "it's an empty Vortex folder (is the mod disabled in Vortex?).");
 
             // empty folder
-            if (!relevantFiles.Any())
+            if (relevantFiles.Length == 0)
                 return new ModFolder(root, searchFolder, ModType.Invalid, null, ModParseError.EmptyFolder, "it's an empty folder.");
 
             // XNB mod
@@ -288,12 +290,13 @@ public class ModScanner
 
         DirectoryInfo[] subfolders = folder.GetDirectories().Where(this.IsRelevant).ToArray();
         FileInfo[] files = folder.GetFiles().Where(this.IsRelevant).ToArray();
-        return subfolders.Any() && !files.Any();
+        return subfolders.Length > 0 && files.Length == 0;
     }
 
     /// <summary>Recursively get all files in a folder.</summary>
     /// <param name="folder">The root folder to search.</param>
-    private IEnumerable<FileInfo> RecursivelyGetFiles(DirectoryInfo folder)
+    /// <param name="files">The list of files to populate.</param>
+    private void RecursivelyGetFiles(DirectoryInfo folder, List<FileInfo> files)
     {
         foreach (FileSystemInfo entry in folder.GetFileSystemInfos())
         {
@@ -301,13 +304,10 @@ public class ModScanner
                 continue;
 
             if (entry is FileInfo file)
-                yield return file;
+                files.Add(file);
 
             if (entry is DirectoryInfo subfolder)
-            {
-                foreach (FileInfo subfolderFile in this.RecursivelyGetFiles(subfolder))
-                    yield return subfolderFile;
-            }
+                this.RecursivelyGetFiles(subfolder, files);
         }
     }
 
@@ -320,7 +320,13 @@ public class ModScanner
             return false;
 
         // ignored entry name
-        return !this.IgnoreFilesystemNames.Any(p => p.IsMatch(entry.Name));
+        foreach (Regex rule in this.IgnoreFilesystemNames)
+        {
+            if (rule.IsMatch(entry.Name))
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>Get whether a set of files looks like an XNB mod.</summary>
@@ -329,8 +335,11 @@ public class ModScanner
     {
         bool hasXnbFile = false;
 
-        foreach (FileInfo file in files.Where(this.IsRelevant))
+        foreach (FileInfo file in files)
         {
+            if (!this.IsRelevant(file))
+                continue;
+
             if (this.StrictXnbModExtensions.Contains(file.Extension))
             {
                 hasXnbFile = true;

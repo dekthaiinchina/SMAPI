@@ -170,7 +170,7 @@ internal class GameContentManager : BaseContentManager
                 return null;
             }
 
-            loader = loadOperations.OrderByDescending(p => p.Priority).FirstOrDefault();
+            loader = loadOperations.MaxBy(p => p.Priority);
         }
         if (loader == null)
             return null;
@@ -228,8 +228,7 @@ internal class GameContentManager : BaseContentManager
         }
 
         // edit asset
-        AssetEditOperation[] editors = editOperations.OrderBy(p => p.Priority).ToArray();
-        foreach (AssetEditOperation editor in editors)
+        foreach (AssetEditOperation editor in editOperations.OrderBy(p => p.Priority))
         {
             IModMetadata mod = editor.Mod;
 

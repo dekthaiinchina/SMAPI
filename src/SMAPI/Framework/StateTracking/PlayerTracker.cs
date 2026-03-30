@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using StardewModdingAPI.Enums;
 using StardewModdingAPI.Framework.StateTracking.Comparers;
 using StardewModdingAPI.Framework.StateTracking.FieldWatchers;
@@ -16,10 +15,16 @@ internal class PlayerTracker : IDisposable
     ** Fields
     *********/
     /// <summary>The player's inventory as of the last reset.</summary>
-    private IDictionary<Item, int> PreviousInventory;
+    private readonly Dictionary<Item, int> PreviousInventory;
 
     /// <summary>The player's inventory change as of the last update.</summary>
-    private IDictionary<Item, int> CurrentInventory;
+    private readonly Dictionary<Item, int> CurrentInventory = [];
+
+    /// <summary>A pooled set used to track the added items when detecting changes.</summary>
+    private readonly HashSet<Item> PooledAdded;
+
+    /// <summary>A pooled set used to track the removed items when detecting changes.</summary>
+    private readonly HashSet<Item> PooledRemoved;
 
     /// <summary>The player's last valid location.</summary>
     private GameLocation? LastValidLocation;
@@ -50,7 +55,7 @@ internal class PlayerTracker : IDisposable
     {
         // init player data
         this.Player = player;
-        this.CurrentInventory = this.GetInventory();
+        this.SaveInventoryTo(this.CurrentInventory);
         this.PreviousInventory = new Dictionary<Item, int>(this.CurrentInventory);
 
         // init trackers
@@ -68,6 +73,11 @@ internal class PlayerTracker : IDisposable
         // track watchers for convenience
         this.Watchers.Add(this.LocationWatcher);
         this.Watchers.AddRange(this.SkillWatchers.Values);
+
+        // init pooled sets
+        var comparer = new ObjectReferenceComparer<Item>();
+        this.PooledAdded = new HashSet<Item>(comparer);
+        this.PooledRemoved = new HashSet<Item>(comparer);
     }
 
     /// <summary>Update the current values if needed.</summary>
@@ -81,16 +91,21 @@ internal class PlayerTracker : IDisposable
             watcher.Update();
 
         // update inventory
-        this.CurrentInventory = this.GetInventory();
+        this.CurrentInventory.Clear();
+        this.SaveInventoryTo(this.CurrentInventory);
     }
 
     /// <summary>Reset all trackers so their current values are the baseline.</summary>
     public void Reset()
     {
+        // reset watchers
         foreach (IWatcher watcher in this.Watchers)
             watcher.Reset();
 
-        this.PreviousInventory = this.CurrentInventory;
+        // reset PreviousInventory to match current
+        this.PreviousInventory.Clear();
+        foreach ((Item item, int stack) in this.CurrentInventory)
+            this.PreviousInventory.Add(item, stack);
     }
 
     /// <summary>Get the player's current location, ignoring temporary null values.</summary>
@@ -105,19 +120,22 @@ internal class PlayerTracker : IDisposable
     /// <returns>Returns whether anything changed.</returns>
     public bool TryGetInventoryChanges([NotNullWhen(true)] out SnapshotItemListDiff? changes)
     {
-        IDictionary<Item, int> current = this.GetInventory();
+        this.PooledAdded.Clear();
+        this.PooledRemoved.Clear();
 
-        ISet<Item> added = new HashSet<Item>(new ObjectReferenceComparer<Item>());
-        ISet<Item> removed = new HashSet<Item>(new ObjectReferenceComparer<Item>());
-        foreach (Item item in this.PreviousInventory.Keys.Union(current.Keys))
+        foreach (Item item in this.PreviousInventory.Keys)
         {
-            if (!this.PreviousInventory.ContainsKey(item))
-                added.Add(item);
-            else if (!current.ContainsKey(item))
-                removed.Add(item);
+            if (!this.CurrentInventory.ContainsKey(item))
+                this.PooledRemoved.Add(item);
         }
 
-        return SnapshotItemListDiff.TryGetChanges(added: added, removed: removed, stackSizes: this.PreviousInventory, out changes);
+        foreach (Item item in this.CurrentInventory.Keys)
+        {
+            if (!this.PreviousInventory.ContainsKey(item))
+                this.PooledAdded.Add(item);
+        }
+
+        return SnapshotItemListDiff.TryGetChanges(added: this.PooledAdded, removed: this.PooledRemoved, stackSizes: this.PreviousInventory, out changes);
     }
 
     /// <summary>Release watchers and resources.</summary>
@@ -135,11 +153,13 @@ internal class PlayerTracker : IDisposable
     ** Private methods
     *********/
     /// <summary>Get the player's current inventory.</summary>
-    private IDictionary<Item, int> GetInventory()
+    /// <param name="inventory">The dictionary to fill with the player's inventory.</param>
+    private void SaveInventoryTo(Dictionary<Item, int> inventory)
     {
-        return this.Player.Items
-            .Where(n => n != null)
-            .Distinct()
-            .ToDictionary(n => n, n => n.Stack);
+        foreach (Item? item in this.Player.Items)
+        {
+            if (item is not null)
+                inventory[item] = item.Stack;
+        }
     }
 }

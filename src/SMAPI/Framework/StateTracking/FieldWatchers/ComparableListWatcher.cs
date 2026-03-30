@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Linq;
+using StardewValley.Extensions;
 
 namespace StardewModdingAPI.Framework.StateTracking.FieldWatchers;
 
@@ -15,6 +15,9 @@ internal class ComparableListWatcher<TValue> : BaseDisposableWatcher, ICollectio
 
     /// <summary>The values during the previous update.</summary>
     private HashSet<TValue> LastValues;
+
+    /// <summary>A pooled set used to update <see cref="LastValues"/> each update.</summary>
+    private HashSet<TValue> NewValues;
 
     /// <summary>The pairs added since the last reset.</summary>
     private readonly List<TValue> AddedImpl = [];
@@ -33,10 +36,10 @@ internal class ComparableListWatcher<TValue> : BaseDisposableWatcher, ICollectio
     public bool IsChanged => this.AddedImpl.Count > 0 || this.RemovedImpl.Count > 0;
 
     /// <inheritdoc />
-    public IEnumerable<TValue> Added => this.AddedImpl;
+    public IReadOnlyCollection<TValue> Added => this.AddedImpl;
 
     /// <inheritdoc />
-    public IEnumerable<TValue> Removed => this.RemovedImpl;
+    public IReadOnlyCollection<TValue> Removed => this.RemovedImpl;
 
 
     /*********
@@ -51,6 +54,7 @@ internal class ComparableListWatcher<TValue> : BaseDisposableWatcher, ICollectio
         this.Name = name;
         this.CurrentValues = values;
         this.LastValues = new HashSet<TValue>(comparer);
+        this.NewValues = new HashSet<TValue>(comparer);
     }
 
     /// <inheritdoc />
@@ -69,11 +73,24 @@ internal class ComparableListWatcher<TValue> : BaseDisposableWatcher, ICollectio
             return;
         }
 
+        // get new values
+        this.NewValues.Clear();
+        this.NewValues.AddRange(this.CurrentValues);
+
         // detect changes
-        HashSet<TValue> curValues = new HashSet<TValue>(this.CurrentValues, this.LastValues.Comparer);
-        this.RemovedImpl.AddRange(from value in this.LastValues where !curValues.Contains(value) select value);
-        this.AddedImpl.AddRange(from value in curValues where !this.LastValues.Contains(value) select value);
-        this.LastValues = curValues;
+        foreach (TValue value in this.LastValues)
+        {
+            if (!this.NewValues.Contains(value))
+                this.RemovedImpl.Add(value);
+        }
+        foreach (TValue value in this.NewValues)
+        {
+            if (!this.LastValues.Contains(value))
+                this.AddedImpl.Add(value);
+        }
+
+        // save result
+        (this.LastValues, this.NewValues) = (this.NewValues, this.LastValues); // reuse the now-unused previous 'LastValues' set on the next update
     }
 
     /// <inheritdoc />

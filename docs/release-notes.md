@@ -5,6 +5,10 @@
 * For players:
   * Improved performance.
   * Improved error message when a mod is blocked by Windows Smart App Control.
+  * Improved translations. Thanks to To2morrow (updated Korean)!
+
+* For mod authors:
+  * Added OS metrics to the [metrics API](technical/web.md#modsmetrics).
 
 ## 4.5.2
 Released 14 March 2026 for Stardew Valley 1.6.14 or later. See [build attestation](https://github.com/Pathoschild/SMAPI/attestations/21366863).

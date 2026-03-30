@@ -465,15 +465,15 @@ internal class SCore : IDisposable
 
             // log loose files
             {
-                string[] looseFiles = new DirectoryInfo(this.ModsPath).GetFiles().Select(p => p.Name).ToArray();
-                if (looseFiles.Any())
+                FileInfo[] looseFiles = new DirectoryInfo(this.ModsPath).GetFiles();
+                if (looseFiles.Length > 0)
                 {
-                    if (looseFiles.Any(name => name.Equals("manifest.json", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+                    if (looseFiles.Any(file => file.Name.Equals("manifest.json", StringComparison.OrdinalIgnoreCase) || file.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
                     {
                         this.Monitor.Log($"Detected mod files directly inside the '{Path.GetFileName(this.ModsPath)}' folder. These will be ignored. Each mod must have its own subfolder instead.", LogLevel.Error);
                     }
 
-                    this.Monitor.Log($"  Ignored loose files: {string.Join(", ", looseFiles.OrderBy(p => p, StringComparer.OrdinalIgnoreCase))}");
+                    this.Monitor.Log($"  Ignored loose files: {string.Join(", ", looseFiles.Select(p => p.Name).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))}");
                 }
             }
 
@@ -481,9 +481,21 @@ internal class SCore : IDisposable
             IModMetadata[] mods = resolver.ReadManifests(toolkit, this.ModsPath, modBlacklist, modDatabase, useCaseInsensitiveFilePaths: this.Settings.UseCaseInsensitivePaths).ToArray();
 
             // filter out ignored mods
-            foreach (IModMetadata mod in mods.Where(p => p.IsIgnored))
-                this.Monitor.Log($"  Skipped {mod.GetRelativePathWithRoot()} (folder name starts with a dot).");
-            mods = mods.Where(p => !p.IsIgnored).ToArray();
+            {
+                bool anyIgnored = false;
+
+                foreach (IModMetadata mod in mods)
+                {
+                    if (mod.IsIgnored)
+                    {
+                        anyIgnored = true;
+                        this.Monitor.Log($"  Skipped {mod.GetRelativePathWithRoot()} (folder name starts with a dot).");
+                    }
+                }
+
+                if (anyIgnored)
+                    mods = mods.Where(p => !p.IsIgnored).ToArray();
+            }
 
             // validate manifests
             resolver.ValidateManifests(mods, Constants.ApiVersion, Constants.GameVersion, toolkit.GetUpdateUrl, getFileLookup: this.GetFileLookup);
@@ -871,7 +883,7 @@ internal class SCore : IDisposable
                     string context = $"Context: loaded save '{Constants.SaveFolderName}', starting {Game1.currentSeason} {Game1.dayOfMonth} Y{Game1.year}, locale set to {this.ContentCore.GetLocale()}.";
                     if (Context.IsMultiplayer)
                     {
-                        int onlineCount = Game1.getOnlineFarmers().Count();
+                        int onlineCount = Game1.getOnlineFarmers().Count;
                         context += $" {(Context.IsMainPlayer ? "Main player" : "Farmhand")} with {onlineCount} {(onlineCount == 1 ? "player" : "players")} online.";
                     }
                     else
@@ -994,13 +1006,13 @@ internal class SCore : IDisposable
                     // location list changes
                     if (state.Locations.LocationList.IsChanged && (events.LocationListChanged.HasListeners || verbose))
                     {
-                        var added = state.Locations.LocationList.Added.ToArray();
-                        var removed = state.Locations.LocationList.Removed.ToArray();
+                        var added = state.Locations.LocationList.Added;
+                        var removed = state.Locations.LocationList.Removed;
 
                         if (verbose)
                         {
-                            string addedText = added.Any() ? string.Join(", ", added.Select(p => p.Name)) : "none";
-                            string removedText = removed.Any() ? string.Join(", ", removed.Select(p => p.Name)) : "none";
+                            string addedText = added.Count > 0 ? string.Join(", ", added.Select(p => p.Name)) : "none";
+                            string removedText = removed.Count > 0 ? string.Join(", ", removed.Select(p => p.Name)) : "none";
                             this.Monitor.Log($"Context: location list changed (added {addedText}; removed {removedText}).", Monitor.ContextLogLevel);
                         }
 
@@ -1400,10 +1412,10 @@ internal class SCore : IDisposable
 
     /// <summary>A callback invoked after assets have been invalidated from the content cache.</summary>
     /// <param name="assetNames">The invalidated asset names.</param>
-    private void OnAssetsInvalidated(IList<IAssetName> assetNames)
+    private void OnAssetsInvalidated(ICollection<IAssetName> assetNames)
     {
         if (this.EventManager.AssetsInvalidated.HasListeners)
-            this.EventManager.AssetsInvalidated.Raise(new AssetsInvalidatedEventArgs(assetNames, assetNames.Select(p => p.GetBaseAssetName())));
+            this.EventManager.AssetsInvalidated.Raise(new AssetsInvalidatedEventArgs(assetNames));
     }
 
     /// <summary>Reload the SMAPI settings.</summary>
@@ -1615,7 +1627,7 @@ internal class SCore : IDisposable
                 {
                     using RegistryKey? key = Registry.LocalMachine.OpenSubKey(registryKey);
                     if (key == null)
-                        return Array.Empty<string>();
+                        return [];
 
                     return key
                         .GetSubKeyNames()
@@ -1730,7 +1742,7 @@ internal class SCore : IDisposable
                                 .GetUpdateKeys(validOnly: true)
                                 .Select(p => p.ToString())
                                 .ToArray();
-                            searchMods.Add(new ModSearchEntryModel(mod.Manifest.UniqueID, mod.Manifest.Version, updateKeys.ToArray(), isBroken: mod.Status == ModMetadataStatus.Failed));
+                            searchMods.Add(new ModSearchEntryModel(mod.Manifest.UniqueID, mod.Manifest.Version, updateKeys, isBroken: mod.Status == ModMetadataStatus.Failed));
                         }
 
                         // fetch results
@@ -1955,7 +1967,7 @@ internal class SCore : IDisposable
         this.Monitor.Log("Loading mods...", LogLevel.Debug);
 
         // load mods
-        IList<IModMetadata> skippedMods = new List<IModMetadata>();
+        List<IModMetadata> skippedMods = [];
         using (AssemblyLoader modAssemblyLoader = new(Constants.Platform, this.Monitor, this.Settings.ParanoidWarnings, this.Settings.RewriteMods, this.Settings.LogTechnicalDetailsForBrokenMods))
         {
             // init
@@ -1973,15 +1985,24 @@ internal class SCore : IDisposable
             }
         }
 
-        IModMetadata[] loaded = this.ModRegistry.GetAll().ToArray();
-        IModMetadata[] loadedContentPacks = loaded.Where(p => p.IsContentPack).ToArray();
-        IModMetadata[] loadedMods = loaded.Where(p => !p.IsContentPack).ToArray();
+        List<IModMetadata> loaded = [];
+        List<IModMetadata> loadedContentPacks = [];
+        List<IModMetadata> loadedMods = [];
+        foreach (IModMetadata mod in this.ModRegistry.GetAll())
+        {
+            loaded.Add(mod);
+
+            if (mod.IsContentPack)
+                loadedContentPacks.Add(mod);
+            else
+                loadedMods.Add(mod);
+        }
 
         // unlock content packs
         this.ModRegistry.AreAllModsLoaded = true;
 
         // log mod info
-        this.LogManager.LogModInfo(loaded, loadedContentPacks, loadedMods, skippedMods.ToArray(), this.Settings.ParanoidWarnings, this.Settings.LogTechnicalDetailsForBrokenMods, this.Settings.FixHarmony);
+        this.LogManager.LogModInfo(loaded, loadedContentPacks, loadedMods, skippedMods, this.Settings.ParanoidWarnings, this.Settings.LogTechnicalDetailsForBrokenMods, this.Settings.FixHarmony);
 
         // initialize translations
         this.ReloadTranslations(loaded);
@@ -2094,10 +2115,10 @@ internal class SCore : IDisposable
 
         // validate dependencies
         // Although dependencies are validated before mods are loaded, a dependency may have failed to load.
-        foreach (IManifestDependency dependency in manifest!.Dependencies.Where(p => p.IsRequired))
+        foreach (IManifestDependency dependency in manifest!.Dependencies)
         {
             // not missing
-            if (this.ModRegistry.Get(dependency.UniqueID) != null)
+            if (!dependency.IsRequired || this.ModRegistry.Get(dependency.UniqueID) != null)
                 continue;
 
             // ignored in compatibility list (e.g. fully replaced by the game code)
@@ -2310,15 +2331,26 @@ internal class SCore : IDisposable
         mod = null;
 
         // find type
-        TypeInfo[] modEntries = modAssembly.DefinedTypes.Where(type => typeof(Mod).IsAssignableFrom(type) && !type.IsAbstract).Take(2).ToArray();
-        if (modEntries.Length == 0)
+        TypeInfo? modType = null;
+        foreach (TypeInfo type in modAssembly.DefinedTypes)
+        {
+            // skip: not a Mod type
+            if (!typeof(Mod).IsAssignableFrom(type) || type.IsAbstract)
+                continue;
+
+            // fail: multiple Mod types found
+            if (modType is not null)
+            {
+                error = $"its DLL contains multiple '{nameof(Mod)}' subclasses.";
+                return false;
+            }
+
+            // else save mod type
+            modType = type;
+        }
+        if (modType is null)
         {
             error = $"its DLL has no '{nameof(Mod)}' subclass.";
-            return false;
-        }
-        if (modEntries.Length > 1)
-        {
-            error = $"its DLL contains multiple '{nameof(Mod)}' subclasses.";
             return false;
         }
 
@@ -2326,7 +2358,7 @@ internal class SCore : IDisposable
         Context.HeuristicModsRunningCode.Push(metadata);
         try
         {
-            mod = (Mod?)modAssembly.CreateInstance(modEntries[0].ToString());
+            mod = (Mod?)modAssembly.CreateInstance(modType.ToString());
         }
         finally
         {
@@ -2458,12 +2490,12 @@ internal class SCore : IDisposable
         }
 
         // validate translations
-        foreach (string locale in translations.Keys.ToArray())
+        foreach (string locale in translations.Keys)
         {
             // handle duplicates
             HashSet<string> keys = new(StringComparer.OrdinalIgnoreCase);
             HashSet<string> duplicateKeys = new(StringComparer.OrdinalIgnoreCase);
-            foreach (string key in translations[locale].Keys.ToArray())
+            foreach (string key in translations[locale].Keys)
             {
                 if (!keys.Add(key))
                 {
