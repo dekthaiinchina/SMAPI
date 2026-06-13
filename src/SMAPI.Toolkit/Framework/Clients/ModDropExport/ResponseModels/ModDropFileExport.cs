@@ -8,7 +8,7 @@ namespace StardewModdingAPI.Toolkit.Framework.Clients.ModDropExport.ResponseMode
 public class ModDropFileExport
 {
     /// <summary>The file identifier.</summary>
-    public uint Id { get; set; }
+    public long Id { get; set; }
 
     /// <summary>The file's display title.</summary>
     [JsonProperty("title")]
@@ -44,6 +44,9 @@ public class ModDropFileExport
 
     /// <summary>When the file was uploaded, as a Unix millisecond timestamp since epoch.</summary>
     public long DateCreated { get; set; }
+
+    /// <summary>The file size in bytes.</summary>
+    public long Size { get; set; }
 
     /// <summary>The extra fields returned by the export API, if any.</summary>
     [JsonExtensionData]
