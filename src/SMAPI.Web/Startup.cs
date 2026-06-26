@@ -22,6 +22,7 @@ using StardewModdingAPI.Toolkit.Serialization;
 using StardewModdingAPI.Web.Framework;
 using StardewModdingAPI.Web.Framework.Caching.CompatibilityRepo;
 using StardewModdingAPI.Web.Framework.Caching.CurseForgeExport;
+using StardewModdingAPI.Web.Framework.Caching.ModDataset;
 using StardewModdingAPI.Web.Framework.Caching.ModDropExport;
 using StardewModdingAPI.Web.Framework.Caching.Mods;
 using StardewModdingAPI.Web.Framework.Caching.NexusExport;
@@ -82,6 +83,15 @@ internal class Startup
     /// <param name="services">The service injection container.</param>
     public void ConfigureServices(IServiceCollection services)
     {
+        // load config
+        ApiClientsConfig apiConfig = this.Configuration.GetRequiredSection("ApiClients").Get<ApiClientsConfig>() ?? throw new InvalidOperationException("Can't initialize server: required 'ApiClients' config section couldn't be loaded.");
+        BackgroundServicesConfig backgroundServicesConfig = this.Configuration.GetRequiredSection("BackgroundServices").Get<BackgroundServicesConfig>() ?? throw new InvalidOperationException("Can't initialize server: required 'BackgroundServices' config section couldn't be loaded.");
+        ModDatasetConfig datasetConfig = this.Configuration.GetRequiredSection("ModDataset").Get<ModDatasetConfig>() ?? throw new InvalidOperationException("Can't initialize server: required 'ModDataset' config section couldn't be loaded.");
+
+        // init user agent
+        string userAgentVersion = this.GetType().Assembly.GetName().Version!.ToString(3);
+        string userAgent = string.Format(apiConfig.UserAgent, userAgentVersion);
+
         // init basic services
         services
             .Configure<ApiClientsConfig>(this.Configuration.GetRequiredSection("ApiClients"))
@@ -108,6 +118,9 @@ internal class Startup
         services.AddSingleton<IModDropExportCacheRepository>(new ModDropExportCacheMemoryRepository());
         services.AddSingleton<INexusExportCacheRepository>(new NexusExportCacheMemoryRepository());
 
+        // init mod dataset
+        services.AddSingleton<IModDatasetRepository>(new ModDatasetRepository(datasetConfig.DownloadZipUrl, datasetConfig.LocalRootPath, userAgent));
+
         // init Hangfire
         services
             .AddHangfire((_, config) =>
@@ -121,29 +134,22 @@ internal class Startup
             });
 
         // init background service
-        {
-            BackgroundServicesConfig config = this.Configuration.GetRequiredSection("BackgroundServices").Get<BackgroundServicesConfig>() ?? throw new InvalidOperationException("Can't initialize server: required 'ApiClients' config section couldn't be loaded.");
-            if (config.Enabled)
-                services.AddHostedService<BackgroundService>();
-        }
+        if (backgroundServicesConfig.Enabled)
+            services.AddHostedService<BackgroundService>();
 
         // init API clients
         {
-            ApiClientsConfig api = this.Configuration.GetRequiredSection("ApiClients").Get<ApiClientsConfig>() ?? throw new InvalidOperationException("Can't initialize server: required 'ApiClients' config section couldn't be loaded.");
-            string version = this.GetType().Assembly.GetName().Version!.ToString(3);
-            string userAgent = string.Format(api.UserAgent, version);
-
             services.AddSingleton<IChucklefishClient>(new ChucklefishClient(
                 userAgent: userAgent,
-                baseUrl: api.ChucklefishBaseUrl,
-                modPageUrlFormat: api.ChucklefishModPageUrlFormat
+                baseUrl: apiConfig.ChucklefishBaseUrl,
+                modPageUrlFormat: apiConfig.ChucklefishModPageUrlFormat
             ));
 
-            if (!string.IsNullOrWhiteSpace(api.CurseForgeExportUrl))
+            if (!string.IsNullOrWhiteSpace(apiConfig.CurseForgeExportUrl))
             {
                 services.AddSingleton<ICurseForgeExportApiClient>(new CurseForgeExportApiClient(
                     userAgent: userAgent,
-                    baseUrl: api.CurseForgeExportUrl
+                    baseUrl: apiConfig.CurseForgeExportUrl
                 ));
             }
             else
@@ -152,26 +158,26 @@ internal class Startup
             services.AddSingleton<ICurseForgeClient>(
                 provider => new CurseForgeClient(
                     userAgent: userAgent,
-                    apiUrl: api.CurseForgeBaseUrl,
-                    apiKey: api.CurseForgeApiKey,
-                    webModUrl: api.CurseForgeWebPageUrl,
+                    apiUrl: apiConfig.CurseForgeBaseUrl,
+                    apiKey: apiConfig.CurseForgeApiKey,
+                    webModUrl: apiConfig.CurseForgeWebPageUrl,
                     exportCache: provider.GetRequiredService<ICurseForgeExportCacheRepository>()
                 )
             );
 
             services.AddSingleton<IGitHubClient>(new GitHubClient(
-                baseUrl: api.GitHubBaseUrl,
+                baseUrl: apiConfig.GitHubBaseUrl,
                 userAgent: userAgent,
-                acceptHeader: api.GitHubAcceptHeader,
-                username: api.GitHubUsername,
-                password: api.GitHubPassword
+                acceptHeader: apiConfig.GitHubAcceptHeader,
+                username: apiConfig.GitHubUsername,
+                password: apiConfig.GitHubPassword
             ));
 
-            if (!string.IsNullOrWhiteSpace(api.ModDropExportUrl))
+            if (!string.IsNullOrWhiteSpace(apiConfig.ModDropExportUrl))
             {
                 services.AddSingleton<IModDropExportApiClient>(new ModDropExportApiClient(
                     userAgent: userAgent,
-                    baseUrl: api.ModDropExportUrl
+                    baseUrl: apiConfig.ModDropExportUrl
                 ));
             }
             else
@@ -180,34 +186,34 @@ internal class Startup
             services.AddSingleton<IModDropClient>(
                 provider => new ModDropClient(
                     userAgent: userAgent,
-                    apiUrl: api.ModDropApiUrl,
-                    modUrlFormat: api.ModDropModPageUrl,
+                    apiUrl: apiConfig.ModDropApiUrl,
+                    modUrlFormat: apiConfig.ModDropModPageUrl,
                     exportCache: provider.GetRequiredService<IModDropExportCacheRepository>()
                 )
             );
 
-            if (!string.IsNullOrWhiteSpace(api.NexusExportUrl))
+            if (!string.IsNullOrWhiteSpace(apiConfig.NexusExportUrl))
             {
                 services.AddSingleton<INexusExportApiClient>(
                     new NexusExportApiClient(
                         userAgent: userAgent,
-                        baseUrl: api.NexusExportUrl
+                        baseUrl: apiConfig.NexusExportUrl
                     )
                 );
             }
             else
                 services.AddSingleton<INexusExportApiClient>(new DisabledNexusExportApiClient());
 
-            if (!string.IsNullOrWhiteSpace(api.NexusApiKey))
+            if (!string.IsNullOrWhiteSpace(apiConfig.NexusApiKey))
             {
                 services.AddSingleton<INexusClient>(
                     provider => new NexusClient(
                         webUserAgent: userAgent,
-                        webBaseUrl: api.NexusBaseUrl,
-                        webModUrlFormat: api.NexusModUrlFormat,
-                        webModScrapeUrlFormat: api.NexusModScrapeUrlFormat,
-                        apiAppVersion: version,
-                        apiKey: api.NexusApiKey,
+                        webBaseUrl: apiConfig.NexusBaseUrl,
+                        webModUrlFormat: apiConfig.NexusModUrlFormat,
+                        webModScrapeUrlFormat: apiConfig.NexusModScrapeUrlFormat,
+                        apiAppVersion: userAgentVersion,
+                        apiKey: apiConfig.NexusApiKey,
                         exportCache: provider.GetRequiredService<INexusExportCacheRepository>()
                     ));
             }
@@ -215,7 +221,7 @@ internal class Startup
                 services.AddSingleton<INexusClient>(new DisabledNexusClient());
 
             services.AddSingleton<IPastebinClient>(new PastebinClient(
-                baseUrl: api.PastebinBaseUrl,
+                baseUrl: apiConfig.PastebinBaseUrl,
                 userAgent: userAgent
             ));
 
@@ -245,7 +251,17 @@ internal class Startup
                 .WithOrigins("https://smapi.io")
             )
             .UseRewriter(this.GetRedirectRules())
-            .UseStaticFiles(new StaticFileOptions { OnPrepareResponse = this.OnPrepareStaticFileResponse }) // wwwroot folder
+            .UseStaticFiles(
+                // serve static files in wwwroot folder
+                new StaticFileOptions
+                {
+                    OnPrepareResponse = this.OnPrepareStaticFileResponse,
+                    ContentTypeProvider = new FileExtensionContentTypeProvider
+                    {
+                        Mappings = { [".jsonl"] = "application/jsonl" }
+                    }
+                }
+            )
             .UseRouting()
             .UseAuthorization()
             .UseEndpoints(p =>
